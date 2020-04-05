@@ -1,15 +1,24 @@
 'use strict';
 
 const screenLength = document.getElementById('screen').clientWidth;
-const noOfCells = 48;
+const noOfCells = 50;
 
-function randomInt(min, max) {
-    return min + Math.floor((max - min) * Math.random());
+function randomInt(min, max, divBy = 1) {
+    const random = min + Math.floor((max - min) * Math.random());
+    // Only integers divisible by divBy
+    return random - (random % divBy);
 }
 
 class Vector2D {
     constructor(x, y) {
         this.setPos(x, y);
+    }
+
+    static distance(vec1, vec2) {
+        if (!(vec1 instanceof Vector2D) || !(vec2 instanceof Vector2D))
+            throw "vec1 and vec2 must by of type Vector2D";
+
+        return Math.sqrt(Math.pow(vec1.x - vec2.x, 2) + Math.pow(vec1.y - vec2.y, 2));
     }
 
     get x() {
@@ -44,14 +53,17 @@ class Cell {
             throw "pos argument should be Vector2D!";
         }
 
-        this._edgeLength = screenLength / noOfCells;
         this.color = color;
         this._pos = new Vector2D(pos.x, pos.y);
     }
 
     draw(ctx) {
         ctx.fillStyle = this._color;
-        ctx.fillRect(this._pos.x, this._pos.y, this._edgeLength, this._edgeLength);
+        ctx.fillRect(this._pos.x, this._pos.y, Cell.edgeLength, Cell.edgeLength);
+    }
+
+    intersects(cell) {
+        return Vector2D.distance(this.pos, cell.pos) <= Cell.edgeLength * Math.sqrt(2);
     }
 
     get pos() {
@@ -73,12 +85,8 @@ class Cell {
         return this._color;
     }
 
-    get edgeLength() {
-        return this._edgeLength;
-    }
-
-    set edgeLength(val) {
-        this._edgeLength = val;
+    static get edgeLength() {
+        return screenLength / noOfCells;
     }
 }
 
@@ -87,22 +95,44 @@ class Snake {
         if (numOfSegs < 2)
             numOfSegs = 2;
 
-        this._numOfSegs = numOfSegs;
-        this._initBody(this._numOfSegs);
+        this._body = new Array();
+        this._numOfSegs = 0;
+
+        for (let i = 0; i <= numOfSegs; i++)
+            this.grow();
+
         this._direction = 'u';
     }
 
-    _initBody(numOfSegs) {
-        let yPos = screenLength / 2;
-        // Insert first cell at random x pos
-        this._body = [new Cell(new Vector2D(randomInt(0, screenLength), yPos))];
-        this._cellEdgeLength = this._body[0]._edgeLength;
-
-        for (let i = 0; i < numOfSegs - 1; i++) {
-            // Next cell is translated edgeLength units down 
-            yPos += this._body[0]._edgeLength;
-            this._body.push(new Cell(new Vector2D(this._body[0]._pos.x, yPos)));
+    grow() {
+        if (this._body.length == 0) {
+            this._body.push(new Cell(new Vector2D((randomInt(0, screenLength, Cell.edgeLength)) - Cell.edgeLength,
+                screenLength / 2)));
         }
+        else {
+            // New cell position is translated down 
+            let newPos = new Vector2D(this._body[this._numOfSegs - 1].pos.x,
+                this._body[this._numOfSegs - 1].pos.y - Cell.edgeLength);
+
+            // Prevent new cells from spawning out of screen
+            if (newPos.y > screenLength) {
+                // If we are near the left screen edge
+                if (newPos.x - Cell.edgeLength < 0) {
+                    newPos.x = this._body[this._numOfSegs - 1].pos.x + Cell.edgeLength;
+                }
+                // If we are near the right screen edge
+                else if (newPos.x + Cell.edgeLength >= screenLength) {
+                    newPos.x = this._body[this._numOfSegs - 1].pos.x - Cell.edgeLength;
+                }
+                else {
+                    newPos.x = this._body[this._numOfSegs - 1].pos.x + Cell.edgeLength;
+                }
+            }
+
+            this._body.push(new Cell(newPos));
+        }
+
+        this._numOfSegs++;
     }
 
     draw(ctx) {
@@ -116,19 +146,19 @@ class Snake {
 
         switch (this._direction) {
             case 'l':
-                newPos.x -= this._cellEdgeLength;
+                newPos.x -= Cell.edgeLength;
                 break;
 
             case 'u':
-                newPos.y -= this._cellEdgeLength;
+                newPos.y -= Cell.edgeLength;
                 break;
 
             case 'r':
-                newPos.x += this._cellEdgeLength;
+                newPos.x += Cell.edgeLength;
                 break;
 
             case 'd':
-                newPos.y += this._cellEdgeLength;
+                newPos.y += Cell.edgeLength;
                 break;
         }
 
@@ -150,6 +180,10 @@ class Snake {
         this._body = newBody;
     }
 
+    get head() {
+        return this._body[0];
+    }
+
     get direction() {
         return this._direction;
     }
@@ -166,7 +200,8 @@ class Snake {
 class Game {
     constructor() {
         this._ctx = document.getElementById('screen').getContext('2d');
-        this._snake = new Snake(20);
+        this._snake = new Snake(3);
+        this._apple = this.newApple();
         setInterval(() => this.update(), 100);
 
         document.addEventListener('keydown', (e) => {
@@ -197,8 +232,23 @@ class Game {
 
     update() {
         this.clear();
-        this._snake.draw(this._ctx);
+        this.manageCollisions();
         this._snake.move();
+        this._apple.draw(this._ctx);
+        this._snake.draw(this._ctx);
+    }
+
+    newApple() {
+        console.log("New apple has appeared");
+        return new Cell(new Vector2D(randomInt(0, screenLength, Cell.edgeLength),
+            randomInt(0, screenLength, Cell.edgeLength)), '#00ff00');
+    }
+
+    manageCollisions() {
+        if (this._apple.intersects(this._snake.head)) {
+            this._apple = this.newApple();
+            this._snake.grow();
+        }
     }
 }
 
