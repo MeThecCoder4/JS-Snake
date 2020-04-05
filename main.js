@@ -14,13 +14,6 @@ class Vector2D {
         this.setPos(x, y);
     }
 
-    static distance(vec1, vec2) {
-        if (!(vec1 instanceof Vector2D) || !(vec2 instanceof Vector2D))
-            throw "vec1 and vec2 must by of type Vector2D";
-
-        return Math.sqrt(Math.pow(vec1.x - vec2.x, 2) + Math.pow(vec1.y - vec2.y, 2));
-    }
-
     get x() {
         return this._x;
     }
@@ -63,7 +56,7 @@ class Cell {
     }
 
     intersects(cell) {
-        return Vector2D.distance(this.pos, cell.pos) <= Cell.edgeLength * Math.sqrt(2);
+        return this.pos.x == cell.pos.x && this.pos.y == cell.pos.y;
     }
 
     get pos() {
